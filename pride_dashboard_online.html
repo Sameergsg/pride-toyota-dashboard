@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pride Toyota – Sales Dashboard</title>
+<script src="msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --red: #CC0000; --dark: #1a1a1a; --white: #ffffff;
+    --border: #e0e0e0; --green: #28a745; --blue: #0066cc; --orange: #ff6600;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: var(--dark); min-height: 100vh; }
+
+  /* LOGIN SCREEN */
+  #login-screen {
+    position: fixed; inset: 0; background: var(--dark);
+    display: flex; align-items: center; justify-content: center; z-index: 999;
+  }
+  .login-box {
+    background: #2d2d2d; border-radius: 16px; padding: 48px 40px;
+    text-align: center; width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .login-badge {
+    width: 64px; height: 64px; background: var(--red); border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 26px; color: #fff; margin: 0 auto 20px;
+  }
+  .login-box h1 { color: #fff; font-size: 20px; margin-bottom: 4px; }
+  .login-box p { color: #888; font-size: 13px; margin-bottom: 32px; }
+  #login-btn {
+    width: 100%; padding: 14px; background: var(--red); color: #fff;
+    border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: background .2s;
+  }
+  #login-btn:hover { background: #aa0000; }
+  #login-error { color: #ff6666; font-size: 12px; margin-top: 12px; display: none; }
+
+  /* LOADING */
+  #loading {
+    position: fixed; inset: 0; background: rgba(26,26,26,.85);
+    display: none; align-items: center; justify-content: center; z-index: 998;
+    color: #fff; font-size: 16px; gap: 14px;
+  }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid #555;
+    border-top-color: var(--red); border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* HEADER */
+  header {
+    background: var(--dark); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px; height: 64px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  }
+  .logo { display: flex; align-items: center; gap: 14px; }
+  .logo-badge {
+    width: 42px; height: 42px; background: var(--red); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 18px; color: #fff;
+  }
+  .logo-text h1 { font-size: 16px; font-weight: 700; line-height: 1.1; }
+  .logo-text span { font-size: 11px; color: #aaa; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  #user-info { font-size: 12px; color: #888; }
+  #last-updated { font-size: 12px; color: #666; }
+  #refresh-btn {
+    background: var(--red); color: #fff; border: none; border-radius: 6px;
+    padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  #refresh-btn:hover { background: #aa0000; }
+  #logout-btn {
+    background: #333; color: #aaa; border: none; border-radius: 6px;
+    padding: 7px 12px; font-size: 12px; cursor: pointer;
+  }
+
+  /* MAIN */
+  main { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
+  .section-title {
+    font-size: 13px; font-weight: 700; letter-spacing: .8px;
+    text-transform: uppercase; color: #888; margin-bottom: 12px; margin-top: 28px;
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  /* KPI CARDS */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+  .kpi-card {
+    background: #fff; border-radius: 12px; padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); border-left: 4px solid var(--red); position: relative; overflow: hidden;
+  }
+  .kpi-card.green { border-color: var(--green); }
+  .kpi-card.blue  { border-color: var(--blue); }
+  .kpi-card.orange{ border-color: var(--orange); }
+  .kpi-label { font-size: 12px; color: #777; margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 800; line-height: 1; }
+  .kpi-sub   { font-size: 11px; color: #aaa; margin-top: 4px; }
+  .kpi-icon  { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 32px; opacity: .08; }
+
+  /* CHARTS */
+  .charts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 18px; }
+  .chart-card {
+    background: #fff; border-radius: 12px; padding: 20px 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .chart-title {
+    font-size: 14px; font-weight: 700; color: var(--dark);
+    margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+  }
+  .chart-title::before {
+    content: ''; display: inline-block; width: 4px; height: 16px;
+    background: var(--red); border-radius: 2px;
+  }
+  .chart-wrap { position: relative; height: 240px; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: var(--dark); color: #fff; padding: 10px 12px; text-align: center; white-space: nowrap; font-weight: 600; }
+  thead th:first-child { text-align: left; }
+  tbody tr:nth-child(even) { background: #fafafa; }
+  tbody tr:hover { background: #fff3f3; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); text-align: center; white-space: nowrap; }
+  tbody td:first-child { text-align: left; font-weight: 600; color: #444; }
+
+  /* ERROR */
+  #error-banner {
+    display: none; background: #fff3cd; border: 1px solid #ffc107;
+    border-radius: 8px; padding: 14px 18px; margin-bottom: 18px;
+    color: #856404; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-badge">PT</div>
+    <h1>PRIDE TOYOTA</h1>
+    <p>Sales Dashboard — Login with your Microsoft account</p>
+    <button id="login-btn" onclick="login()">🔐 Login with Microsoft</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <span id="loading-text">Loading dashboard data…</span>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-badge">PT</div>
+    <div class="logo-text">
+      <h1>PRIDE TOYOTA</h1>
+      <span>MONTHLY SALES DASHBOARD</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="user-info"></span>
+    <span id="last-updated"></span>
+    <button id="refresh-btn" onclick="loadData()">⟳ Refresh</button>
+    <button id="logout-btn" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<main>
+  <div id="error-banner"></div>
+  <div class="section-title">Key Performance Indicators (Cumulative)</div>
+  <div class="kpi-grid" id="kpi-grid"></div>
+  <div class="section-title">Monthly Trends</div>
+  <div class="charts-grid">
+    <div class="chart-card wide"><div class="chart-title">Gate Outs – Monthly Volume</div><div class="chart-wrap"><canvas id="chartGateOuts"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">AB Segment % &amp; Insurance %</div><div class="chart-wrap"><canvas id="chartABIns"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Extended Warranty % &amp; Exchange Count</div><div class="chart-wrap"><canvas id="chartEW"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Accessories per Car (₹)</div><div class="chart-wrap"><canvas id="chartAcc"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">In-House Financing</div><div class="chart-wrap"><canvas id="chartInHouse"></canvas></div></div>
+  </div>
+  <div class="section-title">Data Table – Month Wise</div>
+  <div class="chart-card"><div class="table-wrap" id="data-table"></div></div>
+</main>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const CLIENT_ID   = "34b330f1-f94f-4853-ba3c-8d53423e762b";
+const FILE_ID     = "3CD9D04F-F571-4172-93C9-CA5AAB1E9573";
+const FILE_OWNER  = "accounts@pridetoyota.in";
+const SCOPES      = ["User.Read", "Files.Read"];
+
+const msalConfig = {
+  auth: {
+    clientId: CLIENT_ID,
+    authority: "https://login.microsoftonline.com/4be39b33-0c67-472c-9fdf-ba30e2f274bb",
+    redirectUri: "https://sameergsg.github.io/pride-toyota-dashboard/pride_dashboard_online.html",
+  },
+  cache: { cacheLocation: "localStorage" }
+};
+
+let msalInstance = null;
+let charts = {};
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    msalInstance = new msal.PublicClientApplication(msalConfig);
+    await msalInstance.initialize();
+    const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+    if (account) {
+      msalInstance.setActiveAccount(account);
+      document.getElementById("login-screen").style.display = "none";
+      document.getElementById("user-info").textContent = account.username;
+      await loadData();
+    }
+  } catch(e) {
+    console.error("Init error:", e);
+  }
+}
+
+async function login() {
+  try {
+    if (!msalInstance) {
+      msalInstance = new msal.PublicClientApplication(msalConfig);
+      await msalInstance.initialize();
+    }
+    const result = await msalInstance.loginPopup({ scopes: SCOPES });
+    msalInstance.setActiveAccount(result.account);
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("user-info").textContent = result.account.username;
+    await loadData();
+  } catch(e) {
+    const el = document.getElementById("login-error");
+    el.textContent = "Login failed: " + e.message;
+    el.style.display = "block";
+  }
+}
+
+function logout() {
+  msalInstance.logoutRedirect();
+}
+
+async function getToken() {
+  const account = msalInstance.getActiveAccount();
+  try {
+    const res = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+    return res.accessToken;
+  } catch {
+    const res = await msalInstance.acquireTokenPopup({ scopes: SCOPES });
+    return res.accessToken;
+  }
+}
+
+// ─── GRAPH API ────────────────────────────────────────────────────────────────
+async function graphGet(url) {
+  const token = await getToken();
+  const res = await fetch("https://graph.microsoft.com/v1.0" + url, {
+    headers: { Authorization: "Bearer " + token }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function fetchExcelData() {
+  // Try logged-in user's drive first (works for file owner)
+  let data;
+  try {
+    data = await graphGet(`/me/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
+  } catch {
+    // Try via file owner's account (works when file is shared with logged-in user)
+    data = await graphGet(`/users/${FILE_OWNER}/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
+  }
+  return data.values; // 2D array
+}
+
+// ─── DATA PARSING ─────────────────────────────────────────────────────────────
+function parseData(values) {
+  // Find header row (contains "Particulars")
+  let headerRow = 0;
+  for (let r = 0; r < values.length; r++) {
+    if (values[r][0] && String(values[r][0]).toLowerCase().includes("particular")) {
+      headerRow = r;
+      break;
+    }
+  }
+  const dataStart = headerRow + 1;
+
+  // Parse months from header row
+  const months = [];
+  for (let c = 2; c < values[headerRow].length; c++) {
+    const v = values[headerRow][c];
+    if (v) {
+      if (typeof v === "number") {
+        const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+        months.push(d.toLocaleDateString("en-IN", { month: "short", year: "numeric" }));
+      } else {
+        months.push(String(v));
+      }
+    }
+  }
+
+  function rowVals(offset) {
+    const arr = [];
+    const row = values[dataStart + offset];
+    if (!row) return arr;
+    for (let c = 2; c < values[headerRow].length; c++) {
+      arr.push(parseFloat(row[c]) || 0);
+    }
+    return arr;
+  }
+  function total(offset) {
+    const row = values[dataStart + offset];
+    return row ? (parseFloat(row[1]) || 0) : 0;
+  }
+
+  return {
+    months,
+    gate_outs:           rowVals(0),
+    ab_segment_pct:      rowVals(1),
+    within_area:         rowVals(2),
+    outside_area:        rowVals(3),
+    insurance_pct:       rowVals(4),
+    insurance_3_3_pct:   rowVals(5),
+    accessories_lakh:    rowVals(6),
+    accessories_per_car: rowVals(7),
+    t_gloss_lakh:        rowVals(8),
+    t_gloss_per_car:     rowVals(9),
+    inhouse_no:          rowVals(10),
+    inhouse_pct:         rowVals(11),
+    inhouse_value:       rowVals(12),
+    inhouse_tfs:         rowVals(13),
+    ew_no:               rowVals(14),
+    ew_pct:              rowVals(15),
+    exchange_no:         rowVals(16),
+    totals: {
+      gate_outs:           total(0),
+      ab_segment_pct:      total(1),
+      within_area:         total(2),
+      outside_area:        total(3),
+      insurance_pct:       total(4),
+      insurance_3_3_pct:   total(5),
+      accessories_lakh:    total(6),
+      accessories_per_car: total(7),
+      t_gloss_lakh:        total(8),
+      t_gloss_per_car:     total(9),
+      inhouse_no:          total(10),
+      inhouse_pct:         total(11),
+      inhouse_value:       total(12),
+      inhouse_tfs:         total(13),
+      ew_no:               total(14),
+      ew_pct:              total(15),
+      exchange_no:         total(16),
+    }
+  };
+}
+
+// ─── LOAD DATA ────────────────────────────────────────────────────────────────
+async function loadData() {
+  showLoading(true);
+  document.getElementById("error-banner").style.display = "none";
+  try {
+    const values = await fetchExcelData();
+    const d = parseData(values);
+    renderKPIs(d);
+    renderCharts(d);
+    renderTable(d);
+    document.getElementById("last-updated").textContent =
+      "Updated: " + new Date().toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+  } catch(e) {
+    const b = document.getElementById("error-banner");
+    b.innerHTML = `⚠️ <strong>Data load failed.</strong> Make sure the Excel file is shared with your account. Error: ${e.message}`;
+    b.style.display = "block";
+  } finally {
+    showLoading(false);
+  }
+}
+
+function showLoading(v) {
+  document.getElementById("loading").style.display = v ? "flex" : "none";
+}
+
+// ─── FORMATTERS ───────────────────────────────────────────────────────────────
+const pct   = v => (v * 100).toFixed(1) + "%";
+const num   = v => Number(v).toLocaleString("en-IN");
+const lakh  = v => "₹" + Number(v).toFixed(2) + "L";
+const rupee = v => "₹" + Math.round(v).toLocaleString("en-IN");
+
+// ─── KPI CARDS ────────────────────────────────────────────────────────────────
+function renderKPIs(d) {
+  const t = d.totals;
+  const items = [
+    { label: "Total Gate Outs",       value: num(t.gate_outs),              sub: "Cars sold",               color: "",       icon: "🚗" },
+    { label: "AB Segment %",          value: pct(t.ab_segment_pct),         sub: "Share of AB models",      color: "blue",   icon: "📊" },
+    { label: "Insurance %",           value: pct(t.insurance_pct),          sub: "Penetration",             color: "green",  icon: "🛡️" },
+    { label: "Insurance 3+3 %",       value: pct(t.insurance_3_3_pct),      sub: "Comprehensive 3+3",       color: "green",  icon: "✅" },
+    { label: "Accessories",           value: lakh(t.accessories_lakh),      sub: "Total value",             color: "orange", icon: "🔧" },
+    { label: "Acc. Per Car",          value: rupee(t.accessories_per_car),  sub: "Average/unit",            color: "orange", icon: "💰" },
+    { label: "EW (No.)",              value: num(t.ew_no),                  sub: pct(t.ew_pct) + " pen.",   color: "blue",   icon: "📋" },
+    { label: "In-House Finance",      value: num(t.inhouse_no),             sub: pct(t.inhouse_pct) + " pen.", color: "green", icon: "🏦" },
+    { label: "Exchange (No.)",        value: num(t.exchange_no),            sub: "Exchange cars",           color: "",       icon: "🔄" },
+    { label: "T-Gloss",              value: lakh(t.t_gloss_lakh),          sub: rupee(t.t_gloss_per_car) + "/car", color: "orange", icon: "✨" },
+  ];
+  document.getElementById("kpi-grid").innerHTML = items.map(i => `
+    <div class="kpi-card ${i.color}">
+      <div class="kpi-label">${i.label}</div>
+      <div class="kpi-value">${i.value}</div>
+      <div class="kpi-sub">${i.sub}</div>
+      <div class="kpi-icon">${i.icon}</div>
+    </div>`).join("");
+}
+
+// ─── CHARTS ───────────────────────────────────────────────────────────────────
+const RED=  "rgba(204,0,0,1)",    RED_L=  "rgba(204,0,0,0.15)";
+const BLUE= "rgba(0,102,204,1)",  BLUE_L= "rgba(0,102,204,0.12)";
+const GREEN="rgba(40,167,69,1)",  GREEN_L="rgba(40,167,69,0.12)";
+const ORG=  "rgba(255,102,0,1)",  ORG_L=  "rgba(255,102,0,0.12)";
+
+function makeChart(id, config) {
+  if (charts[id]) { charts[id].destroy(); }
+  charts[id] = new Chart(document.getElementById(id).getContext("2d"), config);
+}
+
+function renderCharts(d) {
+  const m = d.months;
+
+  makeChart("chartGateOuts", {
+    type: "bar",
+    data: { labels: m, datasets: [{ label: "Gate Outs", data: d.gate_outs, backgroundColor: RED, borderRadius: 5 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "top" } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: "#f0f0f0" } } } }
+  });
+
+  makeChart("chartABIns", {
+    type: "line",
+    data: { labels: m, datasets: [
+      { label: "AB Segment %", data: d.ab_segment_pct.map(v => +(v*100).toFixed(1)), borderColor: RED, backgroundColor: RED_L, tension: .4, fill: true, pointRadius: 4 },
+      { label: "Insurance %",  data: d.insurance_pct.map(v => +(v*100).toFixed(1)),  borderColor: BLUE, backgroundColor: BLUE_L, tension: .4, fill: true, pointRadius: 4 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { x: { grid: { display: false } }, y: { ticks: { callback: v => v + "%" }, grid: { color: "#f0f0f0" } } } }
+  });
+
+  makeChart("chartEW", {
+    type: "line",
+    data: { labels: m, datasets: [
+      { label: "EW %",          data: d.ew_pct.map(v => +(v*100).toFixed(1)), borderColor: GREEN, backgroundColor: GREEN_L, tension: .4, fill: true, pointRadius: 4, yAxisID: "y" },
+      { label: "Exchange (No.)",data: d.exchange_no,                           borderColor: ORG,   backgroundColor: ORG_L,   tension: .4, fill: false, pointRadius: 4, yAxisID: "y2" },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: {
+        x:  { grid: { display: false } },
+        y:  { position: "left",  ticks: { callback: v => v + "%" }, grid: { color: "#f0f0f0" } },
+        y2: { position: "right", grid: { display: false } }
+      }}
+  });
+
+  makeChart("chartAcc", {
+    type: "bar",
+    data: { labels: m, datasets: [{ label: "Accessories per Car (₹)", data: d.accessories_per_car.map(Math.round), backgroundColor: ORG, borderRadius: 5 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { x: { grid: { display: false } }, y: { ticks: { callback: v => "₹" + v.toLocaleString("en-IN") }, grid: { color: "#f0f0f0" } } } }
+  });
+
+  makeChart("chartInHouse", {
+    type: "line",
+    data: { labels: m, datasets: [
+      { label: "In-House (No.)",  data: d.inhouse_no,                            borderColor: BLUE, backgroundColor: BLUE_L, tension: .4, fill: false, pointRadius: 4, yAxisID: "y" },
+      { label: "Penetration %",   data: d.inhouse_pct.map(v => +(v*100).toFixed(1)), borderColor: RED, backgroundColor: RED_L, tension: .4, fill: true, pointRadius: 4, yAxisID: "y2" },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: {
+        x:  { grid: { display: false } },
+        y:  { position: "left",  grid: { color: "#f0f0f0" } },
+        y2: { position: "right", ticks: { callback: v => v + "%" }, grid: { display: false } }
+      }}
+  });
+}
+
+// ─── TABLE ────────────────────────────────────────────────────────────────────
+function renderTable(d) {
+  const rows = [
+    { label: "Gate Outs",              vals: d.gate_outs,           fmt: num,   total: num(d.totals.gate_outs) },
+    { label: "AB Segment %",           vals: d.ab_segment_pct,      fmt: pct,   total: pct(d.totals.ab_segment_pct) },
+    { label: "Within Area",            vals: d.within_area,         fmt: num,   total: num(d.totals.within_area) },
+    { label: "Outside Area",           vals: d.outside_area,        fmt: num,   total: num(d.totals.outside_area) },
+    { label: "Insurance %",            vals: d.insurance_pct,       fmt: pct,   total: pct(d.totals.insurance_pct) },
+    { label: "Insurance 3+3 %",        vals: d.insurance_3_3_pct,   fmt: pct,   total: pct(d.totals.insurance_3_3_pct) },
+    { label: "Accessories (₹L)",       vals: d.accessories_lakh,    fmt: lakh,  total: lakh(d.totals.accessories_lakh) },
+    { label: "Accessories/Car (₹)",    vals: d.accessories_per_car, fmt: rupee, total: rupee(d.totals.accessories_per_car) },
+    { label: "T-Gloss (₹L)",          vals: d.t_gloss_lakh,        fmt: lakh,  total: lakh(d.totals.t_gloss_lakh) },
+    { label: "In-House (No.)",         vals: d.inhouse_no,          fmt: num,   total: num(d.totals.inhouse_no) },
+    { label: "In-House Penetration %", vals: d.inhouse_pct,         fmt: pct,   total: pct(d.totals.inhouse_pct) },
+    { label: "In-House (Value ₹L)",    vals: d.inhouse_value,       fmt: lakh,  total: lakh(d.totals.inhouse_value) },
+    { label: "In-House TFS (No.)",     vals: d.inhouse_tfs,         fmt: num,   total: num(d.totals.inhouse_tfs) },
+    { label: "EW (No.)",               vals: d.ew_no,               fmt: num,   total: num(d.totals.ew_no) },
+    { label: "EW %",                   vals: d.ew_pct,              fmt: pct,   total: pct(d.totals.ew_pct) },
+    { label: "Exchange (No.)",         vals: d.exchange_no,         fmt: num,   total: num(d.totals.exchange_no) },
+  ];
+  const headers = ["Particulars", "Total", ...d.months].map(h => `<th>${h}</th>`).join("");
+  const body = rows.map(r =>
+    `<tr><td>${r.label}</td><td><strong>${r.total}</strong></td>${r.vals.map(v => `<td>${r.fmt(v)}</td>`).join("")}</tr>`
+  ).join("");
+  document.getElementById("data-table").innerHTML = `<table><thead><tr>${headers}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ─── START ────────────────────────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  await init();
+});
+
+// Auto refresh every 10 minutes
+setInterval(loadData, 10 * 60 * 1000);
+</script>
+</body>
+</html>
