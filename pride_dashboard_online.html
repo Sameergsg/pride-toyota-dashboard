@@ -134,6 +134,59 @@
     border-radius: 8px; padding: 14px 18px; margin-bottom: 18px;
     color: #856404; font-size: 13px;
   }
+
+  /* FILTER PANEL */
+  .filter-panel {
+    background: #fff; border-radius: 12px; padding: 18px 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px;
+  }
+  .filter-row {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .filter-label {
+    font-size: 12px; font-weight: 700; color: #888;
+    letter-spacing: .6px; text-transform: uppercase; white-space: nowrap;
+  }
+  .month-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; flex: 1;
+  }
+  .chip {
+    padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 2px solid #e0e0e0; background: #f5f5f5;
+    color: #555; transition: all .15s; user-select: none;
+  }
+  .chip:hover { border-color: var(--red); color: var(--red); }
+  .chip.active { background: var(--red); border-color: var(--red); color: #fff; }
+  .chip-all {
+    padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
+    cursor: pointer; border: 2px solid var(--dark); background: var(--dark);
+    color: #fff; transition: all .15s;
+  }
+  .chip-all:hover { background: #333; }
+  .chip-clear {
+    padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 2px solid #ccc; background: #fff;
+    color: #888; transition: all .15s;
+  }
+  .chip-clear:hover { border-color: var(--red); color: var(--red); }
+  .filter-divider { width: 100%; height: 1px; background: #f0f0f0; margin: 12px 0; }
+  .metric-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+  .metric-chip {
+    padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    cursor: pointer; border: 1.5px solid #e0e0e0; background: #f5f5f5;
+    color: #555; transition: all .15s;
+  }
+  .metric-chip.active { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
+  .search-box {
+    padding: 7px 14px; border-radius: 8px; border: 1.5px solid #e0e0e0;
+    font-size: 13px; outline: none; width: 220px; transition: border .15s;
+  }
+  .search-box:focus { border-color: var(--red); }
+  .filter-stats {
+    font-size: 12px; color: #888; white-space: nowrap;
+    padding: 5px 12px; background: #f5f5f5; border-radius: 8px;
+  }
+  .filter-stats strong { color: var(--red); }
 </style>
 </head>
 <body>
@@ -173,15 +226,33 @@
 
 <main>
   <div id="error-banner"></div>
-  <div class="section-title">Key Performance Indicators (Cumulative)</div>
+
+  <!-- FILTER PANEL -->
+  <div class="filter-panel">
+    <div class="filter-row">
+      <span class="filter-label">🗓 Month</span>
+      <div class="month-chips" id="month-chips"></div>
+      <button class="chip-all" onclick="selectAllMonths()">Select All</button>
+      <button class="chip-clear" onclick="clearMonths()">Clear</button>
+      <div class="filter-stats" id="filter-stats"></div>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="filter-row">
+      <span class="filter-label">📊 Metrics</span>
+      <div class="metric-chips" id="metric-chips"></div>
+      <input type="text" class="search-box" id="table-search" placeholder="🔍 Search metric..." oninput="filterTable()"/>
+    </div>
+  </div>
+
+  <div class="section-title">Key Performance Indicators (Filtered)</div>
   <div class="kpi-grid" id="kpi-grid"></div>
   <div class="section-title">Monthly Trends</div>
   <div class="charts-grid">
     <div class="chart-card wide"><div class="chart-title">Gate Outs – Monthly Volume</div><div class="chart-wrap"><canvas id="chartGateOuts"></canvas></div></div>
-    <div class="chart-card"><div class="chart-title">AB Segment % &amp; Insurance %</div><div class="chart-wrap"><canvas id="chartABIns"></canvas></div></div>
-    <div class="chart-card"><div class="chart-title">Extended Warranty % &amp; Exchange Count</div><div class="chart-wrap"><canvas id="chartEW"></canvas></div></div>
-    <div class="chart-card"><div class="chart-title">Accessories per Car (₹)</div><div class="chart-wrap"><canvas id="chartAcc"></canvas></div></div>
-    <div class="chart-card"><div class="chart-title">In-House Financing</div><div class="chart-wrap"><canvas id="chartInHouse"></canvas></div></div>
+    <div class="chart-card" id="card-abins"><div class="chart-title">AB Segment % &amp; Insurance %</div><div class="chart-wrap"><canvas id="chartABIns"></canvas></div></div>
+    <div class="chart-card" id="card-ew"><div class="chart-title">Extended Warranty % &amp; Exchange Count</div><div class="chart-wrap"><canvas id="chartEW"></canvas></div></div>
+    <div class="chart-card" id="card-acc"><div class="chart-title">Accessories per Car (₹)</div><div class="chart-wrap"><canvas id="chartAcc"></canvas></div></div>
+    <div class="chart-card" id="card-inhouse"><div class="chart-title">In-House Financing</div><div class="chart-wrap"><canvas id="chartInHouse"></canvas></div></div>
   </div>
   <div class="section-title">Data Table – Month Wise</div>
   <div class="chart-card"><div class="table-wrap" id="data-table"></div></div>
@@ -371,16 +442,128 @@ function parseData(values) {
   };
 }
 
+// ─── FILTER STATE ─────────────────────────────────────────────────────────────
+let fullData = null;
+let selectedMonths = new Set();
+let selectedMetrics = new Set(["gate_outs","insurance_pct","ab_segment_pct","accessories_per_car","ew_pct","inhouse_pct"]);
+
+const METRIC_LABELS = {
+  gate_outs: "Gate Outs", ab_segment_pct: "AB Segment",
+  insurance_pct: "Insurance %", insurance_3_3_pct: "Ins. 3+3",
+  accessories_lakh: "Accessories", accessories_per_car: "Acc/Car",
+  ew_pct: "EW %", ew_no: "EW No.", inhouse_pct: "In-House %",
+  inhouse_no: "In-House No.", exchange_no: "Exchange", t_gloss_lakh: "T-Gloss"
+};
+
+function buildMonthChips(months) {
+  selectedMonths = new Set(months); // default: all selected
+  const container = document.getElementById("month-chips");
+  container.innerHTML = months.map(m => `
+    <div class="chip active" data-month="${m}" onclick="toggleMonth('${m}')">${m}</div>
+  `).join("");
+  updateFilterStats();
+}
+
+function buildMetricChips() {
+  const container = document.getElementById("metric-chips");
+  container.innerHTML = Object.entries(METRIC_LABELS).map(([k,v]) => `
+    <div class="metric-chip ${selectedMetrics.has(k)?'active':''}" data-metric="${k}" onclick="toggleMetric('${k}')">${v}</div>
+  `).join("");
+}
+
+function toggleMonth(m) {
+  if (selectedMonths.has(m)) {
+    if (selectedMonths.size === 1) return; // keep at least 1
+    selectedMonths.delete(m);
+  } else {
+    selectedMonths.add(m);
+  }
+  document.querySelectorAll(`[data-month="${m}"]`).forEach(el => el.classList.toggle("active", selectedMonths.has(m)));
+  updateFilterStats();
+  applyFilters();
+}
+
+function toggleMetric(k) {
+  if (selectedMetrics.has(k)) selectedMetrics.delete(k);
+  else selectedMetrics.add(k);
+  document.querySelectorAll(`[data-metric="${k}"]`).forEach(el => el.classList.toggle("active", selectedMetrics.has(k)));
+  applyFilters();
+}
+
+function selectAllMonths() {
+  fullData.months.forEach(m => selectedMonths.add(m));
+  document.querySelectorAll(".chip").forEach(el => el.classList.add("active"));
+  updateFilterStats();
+  applyFilters();
+}
+
+function clearMonths() {
+  const months = [...fullData.months];
+  selectedMonths = new Set([months[months.length - 1]]); // keep last month
+  document.querySelectorAll(".chip").forEach(el => {
+    el.classList.toggle("active", selectedMonths.has(el.dataset.month));
+  });
+  updateFilterStats();
+  applyFilters();
+}
+
+function updateFilterStats() {
+  const total = fullData ? fullData.months.length : 0;
+  const sel = selectedMonths.size;
+  document.getElementById("filter-stats").innerHTML = `<strong>${sel}</strong> / ${total} months`;
+}
+
+function getFilteredData() {
+  if (!fullData) return null;
+  const indices = fullData.months.map((m, i) => selectedMonths.has(m) ? i : -1).filter(i => i >= 0);
+  const filtered = { months: indices.map(i => fullData.months[i]), totals: {} };
+
+  const numericKeys = ["gate_outs","within_area","outside_area","accessories_lakh","t_gloss_lakh",
+    "inhouse_no","inhouse_tfs","ew_no","exchange_no","inhouse_value"];
+  const avgKeys = ["ab_segment_pct","insurance_pct","insurance_3_3_pct","accessories_per_car",
+    "t_gloss_per_car","inhouse_pct","ew_pct"];
+  const allKeys = [...numericKeys, ...avgKeys];
+
+  allKeys.forEach(k => {
+    filtered[k] = indices.map(i => fullData[k][i]);
+    if (numericKeys.includes(k)) {
+      filtered.totals[k] = filtered[k].reduce((a,b) => a+b, 0);
+    } else {
+      const valid = filtered[k].filter(v => v > 0);
+      filtered.totals[k] = valid.length ? valid.reduce((a,b)=>a+b,0)/valid.length : 0;
+    }
+  });
+  return filtered;
+}
+
+function applyFilters() {
+  const d = getFilteredData();
+  if (!d) return;
+  renderKPIs(d);
+  renderCharts(d);
+  renderTable(d);
+}
+
+function filterTable() {
+  const q = document.getElementById("table-search").value.toLowerCase();
+  document.querySelectorAll("#data-table tbody tr").forEach(tr => {
+    const label = tr.cells[0]?.textContent.toLowerCase() || "";
+    tr.style.display = label.includes(q) ? "" : "none";
+  });
+}
+
 // ─── LOAD DATA ────────────────────────────────────────────────────────────────
 async function loadData() {
   showLoading(true);
   document.getElementById("error-banner").style.display = "none";
   try {
     const values = await fetchExcelData();
-    const d = parseData(values);
-    renderKPIs(d);
-    renderCharts(d);
-    renderTable(d);
+    fullData = parseData(values);
+    buildMonthChips(fullData.months);
+    buildMetricChips();
+    renderKPIs(fullData);
+    renderCharts(fullData);
+    renderTable(fullData);
     document.getElementById("last-updated").textContent =
       "Updated: " + new Date().toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
   } catch(e) {
