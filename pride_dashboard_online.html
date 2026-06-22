@@ -266,18 +266,27 @@ async function graphGet(url) {
   return res.json();
 }
 
-const SHARE_ID = "u!aHR0cHM6Ly9nb3lhbHNvbnNhdXRvbW9iaWxlc3B2dGwwODMtbXkuc2hhcmVwb2ludC5jb20vOng6L2cvcGVyc29uYWwvYWNjb3VudHNfcHJpZGV0b3lvdGFfaW4vSVFCUDBOazhjZlZ5UVpQSnlscXJIcFZ6QVVqWUR0WUJicG00Sl9EaHlpUDV1SDg_ZT1Eb1Z6Z3k";
-
 async function fetchExcelData() {
-  // Use sharing link approach — works for ALL users (abc + xyz)
-  // No Files.Read.All needed, just Files.Read
-  let data;
+  // Try 1: Owner's own drive (works for accounts@pridetoyota.in)
   try {
-    data = await graphGet(`/shares/${SHARE_ID}/driveItem/workbook/worksheets('Sheet1')/usedRange`);
-  } catch {
-    // Fallback: try via owner's drive (works for abc)
-    data = await graphGet(`/me/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
-  }
+    const data = await graphGet(`/me/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
+    return data.values;
+  } catch {}
+
+  // Try 2: sharedWithMe — works for users who have the file shared with them
+  try {
+    const shared = await graphGet(`/me/drive/sharedWithMe`);
+    const file = shared.value.find(f => f.name === "Summary_Sale.xlsx");
+    if (file) {
+      const driveId = file.remoteItem.parentReference.driveId;
+      const itemId  = file.remoteItem.id;
+      const data = await graphGet(`/drives/${driveId}/items/${itemId}/workbook/worksheets('Sheet1')/usedRange`);
+      return data.values;
+    }
+  } catch {}
+
+  // Try 3: Direct via file owner account
+  const data = await graphGet(`/users/${FILE_OWNER}/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
   return data.values;
 }
 
