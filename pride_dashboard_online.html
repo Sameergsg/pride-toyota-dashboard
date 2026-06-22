@@ -192,7 +192,7 @@
 const CLIENT_ID   = "34b330f1-f94f-4853-ba3c-8d53423e762b";
 const FILE_ID     = "3CD9D04F-F571-4172-93C9-CA5AAB1E9573";
 const FILE_OWNER  = "accounts@pridetoyota.in";
-const SCOPES      = ["User.Read", "Files.Read", "Files.Read.All"];
+const SCOPES      = ["User.Read", "Files.Read"];
 
 const msalConfig = {
   auth: {
@@ -266,16 +266,19 @@ async function graphGet(url) {
   return res.json();
 }
 
+const SHARE_ID = "u!aHR0cHM6Ly9nb3lhbHNvbnNhdXRvbW9iaWxlc3B2dGwwODMtbXkuc2hhcmVwb2ludC5jb20vOng6L2cvcGVyc29uYWwvYWNjb3VudHNfcHJpZGV0b3lvdGFfaW4vSVFCUDBOazhjZlZ5UVpQSnlscXJIcFZ6QVVqWUR0WUJicG00Sl9EaHlpUDV1SDg_ZT1Eb1Z6Z3k";
+
 async function fetchExcelData() {
-  // Try logged-in user's drive first (works for file owner)
+  // Use sharing link approach — works for ALL users (abc + xyz)
+  // No Files.Read.All needed, just Files.Read
   let data;
   try {
-    data = await graphGet(`/me/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
+    data = await graphGet(`/shares/${SHARE_ID}/driveItem/workbook/worksheets('Sheet1')/usedRange`);
   } catch {
-    // Try via file owner's account (works when file is shared with logged-in user)
-    data = await graphGet(`/users/${FILE_OWNER}/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
+    // Fallback: try via owner's drive (works for abc)
+    data = await graphGet(`/me/drive/items/${FILE_ID}/workbook/worksheets('Sheet1')/usedRange`);
   }
-  return data.values; // 2D array
+  return data.values;
 }
 
 // ─── DATA PARSING ─────────────────────────────────────────────────────────────
